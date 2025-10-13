@@ -19,6 +19,9 @@ export default function StaffHome() {
   const [staffs, setStaffs] = useState<Record<string, any>>({});
   const [loading, setLoading] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
+  const [showCustomerModal, setShowCustomerModal] = useState(false);
+const [allocatedCustomers, setAllocatedCustomers] = useState<string[]>([]);
+
 
   // ✅ Check if admin is logged in
   useEffect(() => {
@@ -38,6 +41,44 @@ export default function StaffHome() {
       else setStaffs({});
     });
   }, []);
+const handleViewCustomers = async (staffId: string) => {
+  try {
+    const customersRef = ref(db, "Customers");
+    const snapshot = await get(customersRef);
+
+    if (!snapshot.exists()) {
+      toast.error("No customers found");
+      return;
+    }
+
+    const allCustomers = snapshot.val();
+    const relatedCustomers: any[] = [];
+
+    // Loop through all customers and find those linked to the given staffId
+    Object.entries(allCustomers).forEach(([id, customer]: any) => {
+      if (
+        Array.isArray(customer.allocatedStaffs) &&
+        customer.allocatedStaffs.includes(staffId)
+      ) {
+        relatedCustomers.push({
+          id,
+          username: customer.username || "Unknown",
+        });
+      }
+    });
+
+    if (relatedCustomers.length === 0) {
+      toast("No customers assigned to this staff yet.");
+    }
+
+    setAllocatedCustomers(relatedCustomers);
+    setShowCustomerModal(true);
+  } catch (error) {
+    console.error(error);
+    toast.error("Error loading customers");
+  }
+};
+
 
   // ✅ Add or Update Staff
   const handleSaveStaff = async () => {
@@ -67,18 +108,20 @@ export default function StaffHome() {
           staffId,
           username,
           password,
-          allocatedCustomers: [], // array of customer IDs later
+          allocatedCustomers: [],
+          fcmTokken: '' // array of customer IDs later
         });
 
         toast.success("Staff added successfully");
       } else {
         // Update staff data
-        const existingStaffRef = ref(db, `Staffs/${editId}`);
+        const existingStaffRef:any = ref(db, `Staffs/${editId}`);
         await set(existingStaffRef, {
             'staffId': editId,
           username,
           password,
-          allocatedCustomers: [], // optional
+          allocatedCustomers: [],
+          fcmTokken:existingStaffRef.fcmTokken ? existingStaffRef.fcmTokken:''// optional: keep or reset // optional
         });
 
         toast.success("Staff updated successfully");
@@ -163,9 +206,14 @@ export default function StaffHome() {
                       >
                         Edit
                       </Button>
-                      <Button variant="info" size="sm">
-                        Workflow
-                      </Button>
+                   <Button
+  variant="info"
+  size="sm"
+  className="me-2 mx-2"
+  onClick={() => handleViewCustomers(key)}
+>
+  Customers
+</Button>
                     </td>
                   </tr>
                 ))
@@ -242,6 +290,30 @@ export default function StaffHome() {
             </div>
           </Modal.Footer>
         </Modal>
+        {/* ✅ Customer List Modal */}
+<Modal
+  show={showCustomerModal}
+  onHide={() => setShowCustomerModal(false)}
+  centered
+>
+  <Modal.Header closeButton className="bg-dark text-white">
+    <Modal.Title>Assigned Customers</Modal.Title>
+  </Modal.Header>
+
+  <Modal.Body className="bg-dark text-white">
+    {allocatedCustomers && allocatedCustomers.length > 0 ? (
+      <ul className="list-disc pl-5">
+        {allocatedCustomers.map((customer) => (
+          <li key={customer.id}>{customer.username}</li>
+        ))}
+      </ul>
+    ) : (
+      <p>No customers found for this staff.</p>
+    )}
+  </Modal.Body>
+</Modal>
+
+
       </Container>
     </div>
   );

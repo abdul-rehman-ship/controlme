@@ -103,18 +103,20 @@ const handleRemoveStaff = async (staffId: string) => {
         customerId,
         username,
         password,
-        allocatedStaffs: [], // array of staff IDs later
+        allocatedStaffs: [],
+        fcmTokken:'' // array of staff IDs later
       });
 
       toast.success("Customer added successfully");
     } else {
       // ✅ Update existing customer (keep old ID if already there)
-      const existingCustomerRef = ref(db, `Customers/${editId}`);
+      const existingCustomerRef:any = ref(db, `Customers/${editId}`);
       await set(existingCustomerRef, {
         'customerId': editId, // keep the same ID
         username,
         password,
-        allocatedStaffs: [], // optional: keep or reset
+        allocatedStaffs: [], 
+        fcmTokken:existingCustomerRef.fcmTokken? existingCustomerRef.fcmTokken:''// optional: keep or reset
       });
 
       toast.success("Customer updated successfully");
@@ -208,7 +210,8 @@ const handleEdit = (customerId: string, customer: any) => {
                              Staffs
 </Button>
                       <Button variant="info" size="sm"
-                      className="me-2 mx-2" >
+                      className="me-2 mx-2"
+                        onClick={() => router.push(`/customers/${key}`)} >
                         Workflow
                       </Button>
                     </td>
