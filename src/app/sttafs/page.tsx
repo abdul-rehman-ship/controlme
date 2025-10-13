@@ -303,7 +303,7 @@ const handleViewCustomers = async (staffId: string) => {
   <Modal.Body className="bg-dark text-white">
     {allocatedCustomers && allocatedCustomers.length > 0 ? (
       <ul className="list-disc pl-5">
-        {allocatedCustomers.map((customer) => (
+        {allocatedCustomers.map((customer:any) => (
           <li key={customer.id}>{customer.username}</li>
         ))}
       </ul>
