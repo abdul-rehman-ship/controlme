@@ -193,11 +193,11 @@ const handleEdit = (customerId: string, customer: any) => {
                   <tr key={key}>
                     <td>{customer.username}</td>
                     <td>{customer.password}</td>
-                    <td>
+                    <td className="d-flex gap-2">
                       <Button
                         variant="warning"
                         size="sm"
-                        className="me-2 m-1"
+                        className=" "
                         onClick={() => handleEdit(key, customer)}
                       >
                         Edit
@@ -210,7 +210,7 @@ const handleEdit = (customerId: string, customer: any) => {
                              Staffs
 </Button>
                       <Button variant="info" size="sm"
-                      className="me-2 mx-2"
+                      className=" "
                         onClick={() => router.push(`/customers/${key}`)} >
                         Workflow
                       </Button>

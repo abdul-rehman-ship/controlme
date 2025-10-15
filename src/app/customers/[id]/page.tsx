@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { ref, push, set, onValue, remove, get ,child} from 'firebase/database';
+import { ref, push, set, onValue, remove, get, child } from 'firebase/database';
 import { db } from '../../../../firebase';
 import { Button, Container, Modal, Form, Table } from 'react-bootstrap';
 import toast, { Toaster } from 'react-hot-toast';
@@ -13,9 +13,6 @@ interface Question {
   customerId: string;
   question: string;
   options: string[];
-  correctAnswer: string;
-  customerAnswer?: string;
-  isCorrect?: boolean;
 }
 
 export default function CustomerWorkflowPage() {
@@ -26,11 +23,11 @@ export default function CustomerWorkflowPage() {
   const [showModal, setShowModal] = useState(false);
   const [question, setQuestion] = useState('');
   const [options, setOptions] = useState<string[]>(['', '', '', '']);
-  const [correctAnswer, setCorrectAnswer] = useState('');
   const [editId, setEditId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-   const [username, setUsername] = useState<string>('');
+  const [username, setUsername] = useState<string>('');
 
+  // ✅ Fetch customer name
   useEffect(() => {
     if (!id) return;
 
@@ -59,7 +56,7 @@ export default function CustomerWorkflowPage() {
     onValue(questionsRef, (snapshot) => {
       if (snapshot.exists()) {
         const allQuestions = snapshot.val();
-        const customerQuestions:any = Object.fromEntries(
+        const customerQuestions: any = Object.fromEntries(
           Object.entries(allQuestions).filter(
             ([, q]: any) => q.customerId === id
           )
@@ -71,9 +68,9 @@ export default function CustomerWorkflowPage() {
     });
   }, [id]);
 
-  // ✅ Save or update question
+  // ✅ Save or update question (no correctAnswer)
   const handleSaveQuestion = async () => {
-    if (!question || options.some((opt) => !opt) || !correctAnswer) {
+    if (!question || options.some((opt) => !opt)) {
       toast.error('Please fill all fields');
       return;
     }
@@ -86,7 +83,6 @@ export default function CustomerWorkflowPage() {
           customerId: id,
           question,
           options,
-          correctAnswer,
         });
         toast.success('Question updated successfully');
       } else {
@@ -97,7 +93,6 @@ export default function CustomerWorkflowPage() {
           customerId: id,
           question,
           options,
-          correctAnswer,
         });
         toast.success('Question added successfully');
       }
@@ -105,7 +100,6 @@ export default function CustomerWorkflowPage() {
       setShowModal(false);
       setQuestion('');
       setOptions(['', '', '', '']);
-      setCorrectAnswer('');
       setEditId(null);
     } catch (error) {
       console.error(error);
@@ -119,7 +113,6 @@ export default function CustomerWorkflowPage() {
     setEditId(id);
     setQuestion(q.question);
     setOptions(q.options);
-    setCorrectAnswer(q.correctAnswer);
     setShowModal(true);
   };
 
@@ -146,7 +139,7 @@ export default function CustomerWorkflowPage() {
         </Button>
 
         <div className="d-flex justify-content-between align-items-center mb-4">
-          <h2 className="fw-bold">Questions for Customer: {username}</h2>
+          <h2 className="fw-semi-bold">Questions for Customer: {username}</h2>
           <Button variant="light" onClick={() => setShowModal(true)}>
             + Add Question
           </Button>
@@ -159,7 +152,6 @@ export default function CustomerWorkflowPage() {
               <tr>
                 <th>Question</th>
                 <th>Options</th>
-                <th>Correct Answer</th>
                 <th>Actions</th>
               </tr>
             </thead>
@@ -175,7 +167,6 @@ export default function CustomerWorkflowPage() {
                         ))}
                       </ul>
                     </td>
-                    <td className="fw-bold text-success">{q.correctAnswer}</td>
                     <td>
                       <Button
                         variant="warning"
@@ -197,7 +188,7 @@ export default function CustomerWorkflowPage() {
                 ))
               ) : (
                 <tr>
-                  <td colSpan={4} className="text-center text-muted">
+                  <td colSpan={3} className="text-center text-muted">
                     No questions added yet.
                   </td>
                 </tr>
@@ -241,16 +232,6 @@ export default function CustomerWorkflowPage() {
                   />
                 </Form.Group>
               ))}
-
-              <Form.Group className="mt-3">
-                <Form.Label>Correct Answer</Form.Label>
-                <Form.Control
-                  type="text"
-                  placeholder="Enter correct answer"
-                  value={correctAnswer}
-                  onChange={(e) => setCorrectAnswer(e.target.value)}
-                />
-              </Form.Group>
             </Form>
           </Modal.Body>
 

@@ -21,8 +21,8 @@ export default function AdminNavbar() {
       expand="lg"
       bg="black"
       variant="dark"
-      className="py-3 border-b border-white"
-      style={{ height: "6.5rem" }} // ensures navbar stays same height
+      className="py-3 border-b border-white lg:h-[6.5rem]"
+       // ensures navbar stays same height
     >
       <Container className="d-flex justify-content-between align-items-center">
         {/* ✅ Larger logo image - no border, no round shape */}
