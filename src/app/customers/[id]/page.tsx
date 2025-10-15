@@ -139,9 +139,9 @@ export default function CustomerWorkflowPage() {
         </Button>
 
         <div className="d-flex justify-content-between align-items-center mb-4">
-          <h2 className="fw-semi-bold">Questions for Customer: {username}</h2>
+          <h2 className="fw-semi-bold">Workflow for Customer: {username}</h2>
           <Button variant="light" onClick={() => setShowModal(true)}>
-            + Add Question
+            + Add Workflow
           </Button>
         </div>
 
@@ -150,7 +150,7 @@ export default function CustomerWorkflowPage() {
           <Table bordered hover variant="dark" className="rounded shadow">
             <thead>
               <tr>
-                <th>Question</th>
+                <th>Workflow</th>
                 <th>Options</th>
                 <th>Actions</th>
               </tr>
@@ -189,7 +189,7 @@ export default function CustomerWorkflowPage() {
               ) : (
                 <tr>
                   <td colSpan={3} className="text-center text-muted">
-                    No questions added yet.
+                    No workflow added yet.
                   </td>
                 </tr>
               )}
@@ -201,17 +201,17 @@ export default function CustomerWorkflowPage() {
         <Modal show={showModal} onHide={() => setShowModal(false)} centered>
           <Modal.Header closeButton className="bg-dark text-white">
             <Modal.Title>
-              {editId ? 'Edit Question' : 'Add New Question'}
+              {editId ? 'Edit workflow' : 'Add New Workflow'}
             </Modal.Title>
           </Modal.Header>
 
           <Modal.Body className="bg-dark text-white">
             <Form>
               <Form.Group className="mb-3">
-                <Form.Label>Question</Form.Label>
+                <Form.Label>Workflow</Form.Label>
                 <Form.Control
                   type="text"
-                  placeholder="Enter question"
+                  placeholder="Enter workflow"
                   value={question}
                   onChange={(e) => setQuestion(e.target.value)}
                 />
