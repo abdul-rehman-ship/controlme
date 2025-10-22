@@ -3,8 +3,9 @@
 import { useEffect, useState } from 'react';
 import { ref, onValue, update } from 'firebase/database';
 import { db } from '../../../firebase';
-import { Table, Container, Form } from 'react-bootstrap';
+import { Table, Container, Form, Button } from 'react-bootstrap';
 import toast, { Toaster } from 'react-hot-toast';
+import * as XLSX from 'xlsx';
 import Navbar from '../../components/navbar';
 
 interface Order {
@@ -14,22 +15,21 @@ interface Order {
   staffName?: string;
   status: string;
   timestamp: number;
-  selectedOptions?: string[]; // selected options by customer
-  workflows?: Record<string, Workflow> | Workflow[]; // could be object or array depending on how you store
+  selectedOptions?: Record<string, string>;
+  workflows?: Record<string, Workflow> | Workflow[];
 }
 
 interface Workflow {
   workflowId?: string;
   customerId?: string;
   screenTitle: string;
-  options: string[];
+  options?: string[] | Record<string, string>;
 }
 
 interface User {
   userId?: string;
   username?: string;
   userType?: string;
-  // other fields...
 }
 
 export default function AdminOrdersPage() {
@@ -37,27 +37,19 @@ export default function AdminOrdersPage() {
   const [users, setUsers] = useState<Record<string, User>>({});
   const [loading, setLoading] = useState(false);
 
-  // Load all users once (to map customer/staff IDs to names)
+  // Fetch all users
   useEffect(() => {
     const usersRef = ref(db, 'Users');
     onValue(usersRef, (snap) => {
-      if (snap.exists()) {
-        setUsers(snap.val());
-      } else {
-        setUsers({});
-      }
+      setUsers(snap.exists() ? snap.val() : {});
     });
   }, []);
 
-  // Load all orders
+  // Fetch all orders
   useEffect(() => {
     const ordersRef = ref(db, 'Orders');
     onValue(ordersRef, (snapshot) => {
-      if (snapshot.exists()) {
-        setOrders(snapshot.val());
-      } else {
-        setOrders({});
-      }
+      setOrders(snapshot.exists() ? snapshot.val() : {});
     });
   }, []);
 
@@ -80,35 +72,76 @@ export default function AdminOrdersPage() {
     return `${d.toLocaleDateString()} ${d.toLocaleTimeString()}`;
   };
 
-  // Helper to render workflows that may be saved as array or object
+  // 🧩 Render workflows with support for object/array + nested options object
   const renderWorkflows = (wfData: any) => {
     if (!wfData) return <div className="text-muted">No workflows</div>;
 
-    // If it's an array
-    if (Array.isArray(wfData)) {
-      return wfData.map((wf: Workflow, idx: number) => (
+    const workflowsArray = Array.isArray(wfData)
+      ? wfData
+      : Object.values(wfData);
+
+    return workflowsArray.map((wf: Workflow, idx: number) => {
+      const optionsArray = Array.isArray(wf.options)
+        ? wf.options
+        : wf.options
+        ? Object.values(wf.options)
+        : [];
+
+      return (
         <div key={wf.workflowId ?? idx} className="mb-2">
           <div className="fw-bold">{wf.screenTitle}</div>
-          <ul className="mb-1">
-            {wf.options?.map((opt, i) => (
-              <li key={i}>{opt}</li>
-            )) ?? null}
-          </ul>
+          {optionsArray.length > 0 ? (
+            <ul className="mb-1">
+              {optionsArray.map((opt: string, i: number) => (
+                <li key={i}>•{opt}</li>
+              ))}
+            </ul>
+          ) : (
+            <div className="text-muted small">No options</div>
+          )}
         </div>
-      ));
-    }
+      );
+    });
+  };
 
-    // If it's an object keyed by workflowId
-    return Object.entries(wfData).map(([k, wf]: any) => (
-      <div key={k} className="mb-2">
-        <div className="fw-bold">{wf.screenTitle}</div>
-        <ul className="mb-1">
-          {wf.options?.map((opt: string, i: number) => (
-            <li key={i}>{opt}</li>
-          )) ?? null}
-        </ul>
-      </div>
-    ));
+  // 🧾 Export to Excel
+  const handleExport = () => {
+    const data = Object.entries(orders).map(([key, order]) => {
+      const customer = users[order.customerId];
+      const staff = (order.staffId && users[order.staffId]) ? users[order.staffId] : null;
+
+      const selectedOptionsList = order.selectedOptions
+        ? Object.values(order.selectedOptions).join(', ')
+        : 'No selection';
+
+      // Flatten workflows
+      const wfList = order.workflows
+        ? Object.values(order.workflows).map((wf: any) => {
+            const opts = wf.options
+              ? Array.isArray(wf.options)
+                ? wf.options.join(', ')
+                : Object.values(wf.options).join(', ')
+              : '';
+            return `${wf.screenTitle}: ${opts}`;
+          })
+        : [];
+
+      return {
+        Order_ID: order.orderId ?? key,
+        Customer: customer?.username ?? order.customerId ?? 'Unknown',
+        Staff: order.staffName ?? staff?.username ?? 'N/A',
+        Selected_Options: selectedOptionsList,
+        Workflows: wfList.join(' | '),
+        Status: order.status,
+        Timestamp: formatDate(order.timestamp),
+      };
+    });
+
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Orders');
+    XLSX.writeFile(wb, 'orders_export.xlsx');
+    toast.success('Excel file exported!');
   };
 
   return (
@@ -117,7 +150,12 @@ export default function AdminOrdersPage() {
       <Navbar />
 
       <Container className="py-5">
-        <h2 className="mb-4 fw-bold">All Orders (Admin)</h2>
+        <div className="d-flex justify-content-between align-items-center mb-4">
+          <h2 className="fw-bold">All Orders (Admin)</h2>
+          <Button variant="success" onClick={handleExport}>
+            📤 Export to Excel
+          </Button>
+        </div>
 
         <div className="table-responsive">
           <Table bordered hover variant="dark" className="rounded shadow">
@@ -133,25 +171,20 @@ export default function AdminOrdersPage() {
                 <th>Change Status</th>
               </tr>
             </thead>
-
             <tbody>
               {Object.entries(orders).length > 0 ? (
                 Object.entries(orders).map(([key, order]: any) => {
-                  // order keys in DB might be same as order.orderId or different; use key to update path
                   const customer = users[order.customerId] ?? null;
                   const staff = (order.staffId && users[order.staffId]) ? users[order.staffId] : null;
 
                   return (
                     <tr key={key}>
-                      <td style={{ maxWidth: 220, wordBreak: 'break-all' }}>
-                        {order.orderId ?? key}
-                      </td>
+                      <td style={{ maxWidth: 220, wordBreak: 'break-all' }}>{order.orderId ?? key}</td>
 
                       <td>
                         {customer?.username ? (
                           <div>
                             <div className="fw-bold">{customer.username}</div>
-                            <div className="text-muted small">{order.customerId}</div>
                           </div>
                         ) : (
                           <div>
@@ -173,10 +206,10 @@ export default function AdminOrdersPage() {
                       </td>
 
                       <td style={{ minWidth: 200 }}>
-                        {order.selectedOptions && order.selectedOptions.length > 0 ? (
+                        {order.selectedOptions && Object.keys(order.selectedOptions).length > 0 ? (
                           <ul className="mb-0">
-                            {order.selectedOptions.map((so: string, i: number) => (
-                              <li key={i}>{so}</li>
+                            {Object.entries(order.selectedOptions).map(([key, value]: [string, any], i: number) => (
+                              <li key={key}>{value}</li>
                             ))}
                           </ul>
                         ) : (
@@ -186,7 +219,7 @@ export default function AdminOrdersPage() {
 
                       <td style={{ minWidth: 240 }}>
                         {order.workflows ? (
-                          renderWorkflows(order.workflows)
+                          renderWorkflows( order.workflows)
                         ) : (
                           <div className="text-muted">No workflows</div>
                         )}
@@ -195,9 +228,9 @@ export default function AdminOrdersPage() {
                       <td>
                         <span
                           className={`badge ${
-                            order.status === 'Completed'
+                            order.status === 'Accepted'
                               ? 'bg-success'
-                              : order.status === 'In Progress'
+                              : order.status === 'Rejected'
                               ? 'bg-warning text-dark'
                               : order.status === 'Pending'
                               ? 'bg-secondary'
@@ -217,11 +250,9 @@ export default function AdminOrdersPage() {
                           onChange={(e) => handleStatusChange(key, e.target.value)}
                           disabled={loading}
                         >
-                          {/* adjust status options to suit your workflow */}
                           <option value="Pending">Pending</option>
-                          <option value="In Progress">In Progress</option>
-                          <option value="Completed">Completed</option>
-                          <option value="Cancelled">Cancelled</option>
+                          <option value="Accepted">Accepted</option>
+                          <option value="Rejected">Rejected</option>
                         </Form.Select>
                       </td>
                     </tr>
