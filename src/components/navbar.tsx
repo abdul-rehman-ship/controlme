@@ -56,7 +56,7 @@ export default function AdminNavbar() {
               Staff
             </Nav.Link>
             <Nav.Link
-              href="#"
+              href="/orders"
               className="text-white mx-2 hover:text-gray-300 transition-colors"
             >
               Orders

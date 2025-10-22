@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { ref, set, get, child, onValue,remove ,push } from 'firebase/database';
-import { db } from '../../../firebase';    
+import { ref, set, get, child, onValue, remove, push } from 'firebase/database';
+import { db } from '../../../firebase';
 import { Button, Container, Table, Modal, Form } from 'react-bootstrap';
 import Navbar from '../../components/navbar';
 import { useCookies } from 'react-cookie';
@@ -10,21 +10,23 @@ import { useRouter } from 'next/navigation';
 import toast, { Toaster } from 'react-hot-toast';
 
 export default function AdminHome() {
-  const [cookies, , removeCookie] = useCookies(['adminAuth']);
+  const [cookies] = useCookies(['adminAuth']);
   const router = useRouter();
+
   const [showModal, setShowModal] = useState(false);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [customers, setCustomers] = useState<Record<string, any>>({});
+  const [users, setUsers] = useState<Record<string, any>>({});
+  const [staffs, setStaffs] = useState<Record<string, any>>({});
   const [loading, setLoading] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
+
   const [showStaffModal, setShowStaffModal] = useState(false);
-const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
-const [staffs, setStaffs] = useState<Record<string, any>>({});
-const [allocatedStaffs, setAllocatedStaffs] = useState<string[]>([]);
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+  const [allocatedStaffs, setAllocatedStaffs] = useState<string[]>([]);
 
-
-   useEffect(() => {
+  // 🔹 Auth check
+  useEffect(() => {
     toast.dismiss();
     if (!cookies.adminAuth) {
       toast.error('Please login first');
@@ -32,138 +34,161 @@ const [allocatedStaffs, setAllocatedStaffs] = useState<string[]>([]);
     }
   }, [cookies, router]);
 
-  // 🔹 Fetch all customers
+  // 🔹 Fetch Users (Customers)
   useEffect(() => {
     toast.dismiss();
-    const customersRef = ref(db, 'Customers');
-    onValue(customersRef, (snapshot) => {
-      if (snapshot.exists()) setCustomers(snapshot.val());
-      else setCustomers({});
+    const usersRef = ref(db, 'Users');
+    onValue(usersRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const allUsers = snapshot.val();
+        const customers = Object.fromEntries(
+          Object.entries(allUsers).filter(
+            ([, user]: any) => user.userType === 'customer'
+          )
+        );
+        const staffList = Object.fromEntries(
+          Object.entries(allUsers).filter(
+            ([, user]: any) => user.userType === 'staff'
+          )
+        );
+        setUsers(customers);
+        setStaffs(staffList);
+      } else {
+        setUsers({});
+        setStaffs({});
+      }
     });
   }, []);
-useEffect(() => {
-  const staffsRef = ref(db, "Staffs");
-  onValue(staffsRef, (snapshot) => {
-    if (snapshot.exists()) setStaffs(snapshot.val());
-    else setStaffs({});
-  });
-}, []);
-const handleAddStaffClick = (customerId: string, customer: any) => {
-  setSelectedCustomerId(customerId);
-  setAllocatedStaffs(customer.allocatedStaffs || []);
-  setShowStaffModal(true);
-};
-const handleAddStaff = async (staffId: string) => {
-  if (!selectedCustomerId) return;
 
-  const updatedStaffs = [...allocatedStaffs, staffId];
-  setAllocatedStaffs(updatedStaffs);
+  // 🔹 Open Staff Assignment Modal
+  const handleAddStaffClick = (userId: string, user: any) => {
+    setSelectedUserId(userId);
+    setAllocatedStaffs(user.allocatedStaffs || []);
+    setShowStaffModal(true);
+  };
 
-  await set(ref(db, `Customers/${selectedCustomerId}/allocatedStaffs`), updatedStaffs);
-  toast.success("Staff added to customer");
-};
+  // 🔹 Add Staff to Customer
+  const handleAddStaff = async (staffId: string) => {
+    if (!selectedUserId) return;
 
-const handleRemoveStaff = async (staffId: string) => {
-  if (!selectedCustomerId) return;
+    const updatedStaffs = [...allocatedStaffs, staffId];
+    setAllocatedStaffs(updatedStaffs);
+    await set(ref(db, `Users/${selectedUserId}/allocatedStaffs`), updatedStaffs);
 
-  const updatedStaffs = allocatedStaffs.filter(id => id !== staffId);
-  setAllocatedStaffs(updatedStaffs);
+    toast.success('Staff added to customer');
+  };
 
-  await set(ref(db, `Customers/${selectedCustomerId}/allocatedStaffs`), updatedStaffs);
-  toast.success("Staff removed from customer");
-};
+  // 🔹 Remove Staff
+  const handleRemoveStaff = async (staffId: string) => {
+    if (!selectedUserId) return;
+
+    const updatedStaffs = allocatedStaffs.filter((id) => id !== staffId);
+    setAllocatedStaffs(updatedStaffs);
+    await set(ref(db, `Users/${selectedUserId}/allocatedStaffs`), updatedStaffs);
+
+    toast.success('Staff removed from customer');
+  };
 
   // 🔹 Add or Update Customer
- const handleSaveCustomer = async () => {
-  if (!username || !password) {
-    toast.error("Please fill all fields");
-    return;
-  }
-
-  setLoading(true);
-
-  try {
-    const dbRef = ref(db);
-
-    if (!editId) {
-      // ✅ Check if username already exists
-      const snapshot = await get(child(dbRef, `Customers/${username}`));
-      if (snapshot.exists()) {
-        toast.error("Username already exists");
-        setLoading(false);
-        return;
-      }
-
-      // ✅ Generate unique Firebase key
-      const newCustomerRef = push(ref(db, "Customers"));
-      const customerId = newCustomerRef.key; // unique ID generated by Firebase
-
-      // ✅ Save new customer with empty allocatedStaffs array
-      await set(newCustomerRef, {
-        customerId,
-        username,
-        password,
-        allocatedStaffs: [],
-        fcmTokken:'' // array of staff IDs later
-      });
-
-      toast.success("Customer added successfully");
-    } else {
-      // ✅ Update existing customer (keep old ID if already there)
-      const existingCustomerRef:any = ref(db, `Customers/${editId}`);
-      await set(existingCustomerRef, {
-        'customerId': editId, // keep the same ID
-        username,
-        password,
-        allocatedStaffs: [], 
-        fcmTokken:existingCustomerRef.fcmTokken? existingCustomerRef.fcmTokken:''// optional: keep or reset
-      });
-
-      toast.success("Customer updated successfully");
+  const handleSaveUser = async () => {
+    if (!username || !password) {
+      toast.error('Please fill all fields');
+      return;
     }
 
-    setShowModal(false);
-    setUsername("");
-    setPassword("");
-    setEditId(null);
-  } catch (error) {
-    console.error(error);
-    toast.error("Error saving customer");
-  }
+    setLoading(true);
 
-  setLoading(false);
-};
+    try {
+      const dbRef = ref(db);
+      const usersSnapshot = await get(child(dbRef, 'Users'));
+      const allUsers = usersSnapshot.exists() ? usersSnapshot.val() : {};
 
-// 🔹 Delete Customer
-const handleDeleteCustomer = async () => {
-  if (!editId) return;
+      if (!editId) {
+        // ✅ Check username duplicate
+        const usernameExists = Object.values(allUsers).some(
+          (u: any) => u.username === username
+        );
+        if (usernameExists) {
+          toast.error('Username already exists');
+          setLoading(false);
+          return;
+        }
 
-  const confirmDelete = window.confirm("Are you sure you want to delete this customer?");
-  if (!confirmDelete) return;
+        // ✅ Create new user
+        const newUserRef = push(ref(db, 'Users'));
+        const userId = newUserRef.key;
 
-  setLoading(true);
-  try {
-    await remove(ref(db, `Customers/${editId}`));
-    toast.success("Customer deleted successfully");
-    setShowModal(false);
-    setEditId(null);
-    setUsername("");
-    setPassword("");
-  } catch (error) {
-    console.error(error);
-    toast.error("Error deleting customer");
-  }
-  setLoading(false);
-};
+        await set(newUserRef, {
+          userId,
+          username,
+          password,
+          userType: 'customer',
+          allocatedStaffs: [],
+          fcmToken: '',
+        });
 
-// 🔹 Edit Customer
-const handleEdit = (customerId: string, customer: any) => {
-  setUsername(customer.username);
-  setPassword(customer.password);
-  setEditId(customerId);
-  setShowModal(true);
-};
+        toast.success('Customer added successfully');
+      } else {
+        // ✅ Update existing user
+        const userRef = ref(db, `Users/${editId}`);
+        const oldDataSnapshot = await get(userRef);
+        const oldData = oldDataSnapshot.val() || {};
 
+        await set(userRef, {
+          userId: editId,
+          username,
+          password,
+          userType: oldData.userType || 'customer',
+          allocatedStaffs: oldData.allocatedStaffs || [],
+          fcmToken: oldData.fcmToken || '',
+        });
+
+        toast.success('Customer updated successfully');
+      }
+
+      setShowModal(false);
+      setUsername('');
+      setPassword('');
+      setEditId(null);
+    } catch (error) {
+      console.error(error);
+      toast.error('Error saving customer');
+    }
+
+    setLoading(false);
+  };
+
+  // 🔹 Delete Customer
+  const handleDeleteUser = async () => {
+    if (!editId) return;
+
+    const confirmDelete = window.confirm(
+      'Are you sure you want to delete this customer?'
+    );
+    if (!confirmDelete) return;
+
+    setLoading(true);
+    try {
+      await remove(ref(db, `Users/${editId}`));
+      toast.success('Customer deleted successfully');
+      setShowModal(false);
+      setEditId(null);
+      setUsername('');
+      setPassword('');
+    } catch (error) {
+      console.error(error);
+      toast.error('Error deleting customer');
+    }
+    setLoading(false);
+  };
+
+  // 🔹 Edit Customer
+  const handleEdit = (userId: string, user: any) => {
+    setUsername(user.username);
+    setPassword(user.password);
+    setEditId(userId);
+    setShowModal(true);
+  };
 
   return (
     <div className="min-h-screen bg-dark text-white">
@@ -177,41 +202,42 @@ const handleEdit = (customerId: string, customer: any) => {
           </Button>
         </div>
 
-        {/* ✅ Customer Table */}
+        {/* ✅ Customers Table */}
         <div className="table-responsive">
           <Table striped bordered hover variant="dark" className="fw-light">
             <thead>
-              <tr >
-                <th >Username</th>
+              <tr>
+                <th>Username</th>
                 <th>Password</th>
                 <th>Actions</th>
               </tr>
             </thead>
             <tbody>
-              {Object.entries(customers).length > 0 ? (
-                Object.entries(customers).map(([key, customer]) => (
+              {Object.entries(users).length > 0 ? (
+                Object.entries(users).map(([key, user]) => (
                   <tr key={key}>
-                    <td>{customer.username}</td>
-                    <td>{customer.password}</td>
+                    <td>{user.username}</td>
+                    <td>{user.password}</td>
                     <td className="d-flex gap-2">
                       <Button
                         variant="warning"
                         size="sm"
-                        className=" "
-                        onClick={() => handleEdit(key, customer)}
+                        onClick={() => handleEdit(key, user)}
                       >
                         Edit
                       </Button>
                       <Button
-                            variant="success"
-                            size="sm"
-                            onClick={() => handleAddStaffClick(key, customer)}
-                            >
-                             Staffs
-</Button>
-                      <Button variant="info" size="sm"
-                      className=" "
-                        onClick={() => router.push(`/customers/${key}`)} >
+                        variant="success"
+                        size="sm"
+                        onClick={() => handleAddStaffClick(key, user)}
+                      >
+                        Staffs
+                      </Button>
+                      <Button
+                        variant="info"
+                        size="sm"
+                        onClick={() => router.push(`/customers/${key}`)}
+                      >
                         Workflow
                       </Button>
                     </td>
@@ -229,119 +255,110 @@ const handleEdit = (customerId: string, customer: any) => {
         </div>
 
         {/* ✅ Add/Edit Modal */}
-       <Modal show={showModal} onHide={() => setShowModal(false)} centered>
-      <Modal.Header closeButton className="bg-dark text-white">
-        <Modal.Title>{editId ? "Edit Customer" : "Add New Customer"}</Modal.Title>
-      </Modal.Header>
+        <Modal show={showModal} onHide={() => setShowModal(false)} centered>
+          <Modal.Header closeButton className="bg-dark text-white">
+            <Modal.Title>
+              {editId ? 'Edit Customer' : 'Add New Customer'}
+            </Modal.Title>
+          </Modal.Header>
+          <Modal.Body className="bg-dark text-white">
+            <Form>
+              <Form.Group className="mb-3">
+                <Form.Label>Username</Form.Label>
+                <Form.Control
+                  type="text"
+                  placeholder="Enter username"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  disabled={!!editId}
+                />
+              </Form.Group>
+              <Form.Group>
+                <Form.Label>Password</Form.Label>
+                <Form.Control
+                  type="text"
+                  placeholder="Enter password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                />
+              </Form.Group>
+            </Form>
+          </Modal.Body>
+          <Modal.Footer className="bg-dark text-white">
+            {editId && (
+              <Button
+                variant="danger"
+                onClick={handleDeleteUser}
+                disabled={loading}
+                className="me-auto"
+              >
+                {loading ? 'Deleting...' : 'Delete'}
+              </Button>
+            )}
+            <div className="d-flex">
+              <Button
+                variant="secondary"
+                onClick={() => setShowModal(false)}
+                className="me-2"
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="light"
+                onClick={handleSaveUser}
+                disabled={loading}
+              >
+                {loading ? 'Saving...' : 'Save'}
+              </Button>
+            </div>
+          </Modal.Footer>
+        </Modal>
 
-      <Modal.Body className="bg-dark text-white">
-        <Form>
-          <Form.Group className="mb-3">
-            <Form.Label className="fw-semi-bold">Username</Form.Label>
-            <Form.Control
-              type="text"
-              placeholder="Enter username"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              disabled={!!editId}
-            />
-          </Form.Group>
-          <Form.Group>
-            <Form.Label className="fw-semi-bold">Password</Form.Label>
-            <Form.Control
-              type="text"
-              placeholder="Enter password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-            />
-          </Form.Group>
-        </Form>
-      </Modal.Body>
-
-      <Modal.Footer className="bg-dark text-white flex justify-between">
-        <div>
-          {editId && (
-            <Button
-              variant="danger"
-              onClick={handleDeleteCustomer}
-              disabled={loading}
-              className="me-2"
-            >
-              {loading ? "Deleting..." : "Delete"}
+        {/* ✅ Staff Modal */}
+        <Modal show={showStaffModal} onHide={() => setShowStaffModal(false)} centered>
+          <Modal.Header closeButton className="bg-dark text-white">
+            <Modal.Title>Manage Allocated Staffs</Modal.Title>
+          </Modal.Header>
+          <Modal.Body className="bg-dark text-white">
+            <h6 className="mb-2">Allocated Staffs</h6>
+            {allocatedStaffs.length > 0 ? (
+              allocatedStaffs.map((id) => (
+                <div key={id} className="d-flex justify-content-between py-1">
+                  <span>{staffs[id]?.username || 'Unknown Staff'}</span>
+                  <Button
+                    variant="danger"
+                    size="sm"
+                    onClick={() => handleRemoveStaff(id)}
+                  >
+                    ❌
+                  </Button>
+                </div>
+              ))
+            ) : (
+              <p className="text-muted">No staff allocated.</p>
+            )}
+            <hr className="text-white" />
+            <h6 className="mb-2">Unallocated Staffs</h6>
+            {Object.entries(staffs)
+              .filter(([id]) => !allocatedStaffs.includes(id))
+              .map(([id, staff]) => (
+                <div
+                  key={id}
+                  className="d-flex justify-content-between py-1"
+                >
+                  <span>{staff.username}</span>
+                  <Button variant="success" size="sm" onClick={() => handleAddStaff(id)}>
+                    +
+                  </Button>
+                </div>
+              ))}
+          </Modal.Body>
+          <Modal.Footer className="bg-dark text-white">
+            <Button variant="secondary" onClick={() => setShowStaffModal(false)}>
+              Close
             </Button>
-          )}
-        </div>
-
-        <div className="d-flex">
-          <Button
-            variant="secondary"
-            onClick={() => setShowModal(false)}
-            className="me-2"
-          >
-            Cancel
-          </Button>
-          <Button variant="light" onClick={handleSaveCustomer} disabled={loading}>
-            {loading ? "Saving..." : "Save"}
-          </Button>
-        </div>
-      </Modal.Footer>
-    </Modal>
-    <Modal show={showStaffModal} onHide={() => setShowStaffModal(false)} centered>
-  <Modal.Header closeButton className="bg-dark text-white">
-    <Modal.Title>Manage Allocated Staffs</Modal.Title>
-  </Modal.Header>
-  <Modal.Body className="bg-dark text-white">
-    <h6 className="mb-2">Allocated Staffs</h6>
-    {allocatedStaffs.length > 0 ? (
-      allocatedStaffs.map((id) => (
-        <div
-          key={id}
-          className="d-flex justify-content-between align-items-center  py-1"
-        >
-          <span>{staffs[id]?.username || "Unknown Staff"}</span>
-          <Button
-            variant="danger"
-            size="sm"
-            onClick={() => handleRemoveStaff(id)}
-          >
-            ❌
-          </Button>
-        </div>
-      ))
-    ) : (
-      <p className="text-muted">No staff allocated.</p>
-    )}
-
-    <hr className="text-white" />
-
-    <h6 className="mb-2">Unallocated Staffs</h6>
-    {Object.entries(staffs)
-      .filter(([id]) => !allocatedStaffs.includes(id))
-      .map(([id, staff]) => (
-        <div
-          key={id}
-          className="d-flex justify-content-between align-items-center  py-1"
-        >
-          <span>{staff.username}</span>
-          <Button
-            variant="success"
-            size="sm"
-            
-            onClick={() => handleAddStaff(id)}
-          >
-            +
-          </Button>
-        </div>
-      ))}
-  </Modal.Body>
-
-  <Modal.Footer className="bg-dark text-white">
-    <Button variant="secondary" onClick={() => setShowStaffModal(false)}>
-      Close
-    </Button>
-  </Modal.Footer>
-</Modal>
-
+          </Modal.Footer>
+        </Modal>
       </Container>
     </div>
   );

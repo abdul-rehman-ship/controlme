@@ -8,10 +8,10 @@ import { Button, Container, Modal, Form, Table } from 'react-bootstrap';
 import toast, { Toaster } from 'react-hot-toast';
 import Navbar from '../../../components/navbar';
 
-interface Question {
-  questionId: string;
+interface Workflow {
+  workflowId: string;
   customerId: string;
-  question: string;
+  screenTitle: string;
   options: string[];
 }
 
@@ -19,58 +19,58 @@ export default function CustomerWorkflowPage() {
   const { id } = useParams();
   const router = useRouter();
 
-  const [questions, setQuestions] = useState<Record<string, Question>>({});
+  const [workflows, setWorkflows] = useState<Record<string, Workflow>>({});
   const [showModal, setShowModal] = useState(false);
-  const [question, setQuestion] = useState('');
+  const [screenTitle, setScreenTitle] = useState('');
   const [options, setOptions] = useState<string[]>(['', '', '', '']);
   const [editId, setEditId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [username, setUsername] = useState<string>('');
 
-  // ✅ Fetch customer name
+  // ✅ Fetch customer name from Users node
   useEffect(() => {
     if (!id) return;
 
     const fetchCustomer = async () => {
       try {
-        const snapshot = await get(child(ref(db), `Customers/${id}`));
+        const snapshot = await get(child(ref(db), `Users/${id}`));
         if (snapshot.exists()) {
           const data = snapshot.val();
-          setUsername(data.username);
+          setUsername(data.username || 'Unknown');
         } else {
-          toast.error('Customer not found');
+          toast.error('User not found');
         }
       } catch (error) {
         console.error(error);
-        toast.error('Error fetching customer data');
+        toast.error('Error fetching user data');
       }
     };
 
     fetchCustomer();
   }, [id]);
 
-  // ✅ Fetch all questions for this customer
+  // ✅ Fetch all workflows for this customer
   useEffect(() => {
     if (!id) return;
-    const questionsRef = ref(db, 'Questions');
-    onValue(questionsRef, (snapshot) => {
+    const workflowsRef = ref(db, 'Workflows');
+    onValue(workflowsRef, (snapshot) => {
       if (snapshot.exists()) {
-        const allQuestions = snapshot.val();
-        const customerQuestions: any = Object.fromEntries(
-          Object.entries(allQuestions).filter(
-            ([, q]: any) => q.customerId === id
+        const allWorkflows = snapshot.val();
+        const customerWorkflows: any = Object.fromEntries(
+          Object.entries(allWorkflows).filter(
+            ([, wf]: any) => wf.customerId === id
           )
         );
-        setQuestions(customerQuestions);
+        setWorkflows(customerWorkflows);
       } else {
-        setQuestions({});
+        setWorkflows({});
       }
     });
   }, [id]);
 
-  // ✅ Save or update question (no correctAnswer)
-  const handleSaveQuestion = async () => {
-    if (!question || options.some((opt) => !opt)) {
+  // ✅ Save or update workflow
+  const handleSaveWorkflow = async () => {
+    if (!screenTitle || options.some((opt) => !opt)) {
       toast.error('Please fill all fields');
       return;
     }
@@ -78,53 +78,53 @@ export default function CustomerWorkflowPage() {
     setLoading(true);
     try {
       if (editId) {
-        await set(ref(db, `Questions/${editId}`), {
-          questionId: editId,
+        await set(ref(db, `Workflows/${editId}`), {
+          workflowId: editId,
           customerId: id,
-          question,
+          screenTitle,
           options,
         });
-        toast.success('Question updated successfully');
+        toast.success('Workflow updated successfully');
       } else {
-        const newQuestionRef = push(ref(db, 'Questions'));
-        const questionId = newQuestionRef.key!;
-        await set(newQuestionRef, {
-          questionId,
+        const newWorkflowRef = push(ref(db, 'Workflows'));
+        const workflowId = newWorkflowRef.key!;
+        await set(newWorkflowRef, {
+          workflowId,
           customerId: id,
-          question,
+          screenTitle,
           options,
         });
-        toast.success('Question added successfully');
+        toast.success('Workflow added successfully');
       }
 
       setShowModal(false);
-      setQuestion('');
+      setScreenTitle('');
       setOptions(['', '', '', '']);
       setEditId(null);
     } catch (error) {
       console.error(error);
-      toast.error('Error saving question');
+      toast.error('Error saving workflow');
     }
     setLoading(false);
   };
 
-  // ✅ Edit question
-  const handleEdit = (id: string, q: Question) => {
+  // ✅ Edit workflow
+  const handleEdit = (id: string, wf: Workflow) => {
     setEditId(id);
-    setQuestion(q.question);
-    setOptions(q.options);
+    setScreenTitle(wf.screenTitle);
+    setOptions(wf.options);
     setShowModal(true);
   };
 
-  // ✅ Delete question
+  // ✅ Delete workflow
   const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this question?')) return;
+    if (!confirm('Are you sure you want to delete this workflow?')) return;
     try {
-      await remove(ref(db, `Questions/${id}`));
-      toast.success('Question deleted successfully');
+      await remove(ref(db, `Workflows/${id}`));
+      toast.success('Workflow deleted successfully');
     } catch (error) {
       console.error(error);
-      toast.error('Error deleting question');
+      toast.error('Error deleting workflow');
     }
   };
 
@@ -139,30 +139,30 @@ export default function CustomerWorkflowPage() {
         </Button>
 
         <div className="d-flex justify-content-between align-items-center mb-4">
-          <h2 className="fw-semi-bold">Workflow for Customer: {username}</h2>
+          <h2 className="fw-semi-bold">Workflows for Customer: {username}</h2>
           <Button variant="light" onClick={() => setShowModal(true)}>
             + Add Workflow
           </Button>
         </div>
 
-        {/* ✅ Questions Table */}
+        {/* ✅ Workflows Table */}
         <div className="table-responsive">
           <Table bordered hover variant="dark" className="rounded shadow">
             <thead>
               <tr>
-                <th>Workflow</th>
+                <th>Screen Title</th>
                 <th>Options</th>
                 <th>Actions</th>
               </tr>
             </thead>
             <tbody>
-              {Object.entries(questions).length > 0 ? (
-                Object.entries(questions).map(([key, q]: any) => (
+              {Object.entries(workflows).length > 0 ? (
+                Object.entries(workflows).map(([key, wf]: any) => (
                   <tr key={key}>
-                    <td>{q.question}</td>
+                    <td>{wf.screenTitle}</td>
                     <td>
                       <ul className="list-unstyled mb-0">
-                        {q.options.map((opt: string, i: number) => (
+                        {wf.options.map((opt: string, i: number) => (
                           <li key={i}>• {opt}</li>
                         ))}
                       </ul>
@@ -172,7 +172,7 @@ export default function CustomerWorkflowPage() {
                         variant="warning"
                         size="sm"
                         className="me-2"
-                        onClick={() => handleEdit(key, q)}
+                        onClick={() => handleEdit(key, wf)}
                       >
                         Edit
                       </Button>
@@ -189,7 +189,7 @@ export default function CustomerWorkflowPage() {
               ) : (
                 <tr>
                   <td colSpan={3} className="text-center text-muted">
-                    No workflow added yet.
+                    No workflows added yet.
                   </td>
                 </tr>
               )}
@@ -201,19 +201,19 @@ export default function CustomerWorkflowPage() {
         <Modal show={showModal} onHide={() => setShowModal(false)} centered>
           <Modal.Header closeButton className="bg-dark text-white">
             <Modal.Title>
-              {editId ? 'Edit workflow' : 'Add New Workflow'}
+              {editId ? 'Edit Workflow' : 'Add New Workflow'}
             </Modal.Title>
           </Modal.Header>
 
           <Modal.Body className="bg-dark text-white">
             <Form>
               <Form.Group className="mb-3">
-                <Form.Label>Workflow</Form.Label>
+                <Form.Label>Screen Title</Form.Label>
                 <Form.Control
                   type="text"
-                  placeholder="Enter workflow"
-                  value={question}
-                  onChange={(e) => setQuestion(e.target.value)}
+                  placeholder="Enter screen title"
+                  value={screenTitle}
+                  onChange={(e) => setScreenTitle(e.target.value)}
                 />
               </Form.Group>
 
@@ -239,7 +239,7 @@ export default function CustomerWorkflowPage() {
             <Button variant="secondary" onClick={() => setShowModal(false)}>
               Cancel
             </Button>
-            <Button variant="light" onClick={handleSaveQuestion} disabled={loading}>
+            <Button variant="light" onClick={handleSaveWorkflow} disabled={loading}>
               {loading ? 'Saving...' : 'Save'}
             </Button>
           </Modal.Footer>

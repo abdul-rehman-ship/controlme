@@ -20,8 +20,7 @@ export default function StaffHome() {
   const [loading, setLoading] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [showCustomerModal, setShowCustomerModal] = useState(false);
-const [allocatedCustomers, setAllocatedCustomers] = useState<string[]>([]);
-
+  const [allocatedCustomers, setAllocatedCustomers] = useState<any[]>([]);
 
   // ✅ Check if admin is logged in
   useEffect(() => {
@@ -32,53 +31,66 @@ const [allocatedCustomers, setAllocatedCustomers] = useState<string[]>([]);
     }
   }, [cookies, router]);
 
-  // ✅ Fetch all staff
+  // ✅ Fetch all staff from Users where userType = "staff"
   useEffect(() => {
     toast.dismiss();
-    const staffRef = ref(db, "Staffs");
-    onValue(staffRef, (snapshot) => {
-      if (snapshot.exists()) setStaffs(snapshot.val());
-      else setStaffs({});
-    });
-  }, []);
-const handleViewCustomers = async (staffId: string) => {
-  try {
-    const customersRef = ref(db, "Customers");
-    const snapshot = await get(customersRef);
+    const usersRef = ref(db, "Users");
+    onValue(usersRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const allUsers = snapshot.val();
+        const staffUsers: Record<string, any> = {};
 
-    if (!snapshot.exists()) {
-      toast.error("No customers found");
-      return;
-    }
-
-    const allCustomers = snapshot.val();
-    const relatedCustomers: any[] = [];
-
-    // Loop through all customers and find those linked to the given staffId
-    Object.entries(allCustomers).forEach(([id, customer]: any) => {
-      if (
-        Array.isArray(customer.allocatedStaffs) &&
-        customer.allocatedStaffs.includes(staffId)
-      ) {
-        relatedCustomers.push({
-          id,
-          username: customer.username || "Unknown",
+        Object.entries(allUsers).forEach(([key, user]: any) => {
+          if (user.userType === "staff") {
+            staffUsers[key] = user;
+          }
         });
+
+        setStaffs(staffUsers);
+      } else {
+        setStaffs({});
       }
     });
+  }, []);
 
-    if (relatedCustomers.length === 0) {
-      toast("No customers assigned to this staff yet.");
+  // ✅ View customers assigned to this staff
+  const handleViewCustomers = async (staffId: string) => {
+    try {
+      const usersRef = ref(db, "Users");
+      const snapshot = await get(usersRef);
+
+      if (!snapshot.exists()) {
+        toast.error("No users found");
+        return;
+      }
+
+      const allUsers = snapshot.val();
+      const relatedCustomers: any[] = [];
+
+      Object.entries(allUsers).forEach(([id, user]: any) => {
+        if (
+          user.userType === "customer" &&
+          Array.isArray(user.allocatedStaffs) &&
+          user.allocatedStaffs.includes(staffId)
+        ) {
+          relatedCustomers.push({
+            id,
+            username: user.username || "Unknown",
+          });
+        }
+      });
+
+      if (relatedCustomers.length === 0) {
+        toast("No customers assigned to this staff yet.");
+      }
+
+      setAllocatedCustomers(relatedCustomers);
+      setShowCustomerModal(true);
+    } catch (error) {
+      console.error(error);
+      toast.error("Error loading customers");
     }
-
-    setAllocatedCustomers(relatedCustomers);
-    setShowCustomerModal(true);
-  } catch (error) {
-    console.error(error);
-    toast.error("Error loading customers");
-  }
-};
-
+  };
 
   // ✅ Add or Update Staff
   const handleSaveStaff = async () => {
@@ -93,35 +105,46 @@ const handleViewCustomers = async (staffId: string) => {
 
       if (!editId) {
         // Check if username already exists
-        const snapshot = await get(child(dbRef, `Staffs/${username}`));
-        if (snapshot.exists()) {
-          toast.error("Username already exists");
-          setLoading(false);
-          return;
+        const usersSnapshot = await get(child(dbRef, "Users"));
+        if (usersSnapshot.exists()) {
+          const allUsers = usersSnapshot.val();
+          const usernameExists = Object.values(allUsers).some(
+            (u: any) => u.username === username
+          );
+          if (usernameExists) {
+            toast.error("Username already exists");
+            setLoading(false);
+            return;
+          }
         }
 
         // Generate Firebase ID
-        const newStaffRef = push(ref(db, "Staffs"));
-        const staffId = newStaffRef.key;
+        const newUserRef = push(ref(db, "Users"));
+        const userId = newUserRef.key;
 
-        await set(newStaffRef, {
-          staffId,
+        await set(newUserRef, {
+          userId,
           username,
           password,
+          userType: "staff",
           allocatedCustomers: [],
-          fcmTokken: '' // array of customer IDs later
+          fcmToken: "",
         });
 
         toast.success("Staff added successfully");
       } else {
-        // Update staff data
-        const existingStaffRef:any = ref(db, `Staffs/${editId}`);
-        await set(existingStaffRef, {
-            'staffId': editId,
+        // Update existing staff
+        const staffRef = ref(db, `Users/${editId}`);
+        const existingStaffSnap = await get(staffRef);
+        const oldData = existingStaffSnap.exists() ? existingStaffSnap.val() : {};
+
+        await set(staffRef, {
+          ...oldData,
           username,
           password,
-          allocatedCustomers: [],
-          fcmTokken:existingStaffRef.fcmTokken ? existingStaffRef.fcmTokken:''// optional: keep or reset // optional
+          userType: "staff",
+          fcmToken: oldData.fcmToken || "",
+          allocatedCustomers: oldData.allocatedCustomers || [],
         });
 
         toast.success("Staff updated successfully");
@@ -147,7 +170,7 @@ const handleViewCustomers = async (staffId: string) => {
 
     setLoading(true);
     try {
-      await remove(ref(db, `Staffs/${editId}`));
+      await remove(ref(db, `Users/${editId}`));
       toast.success("Staff deleted successfully");
       setShowModal(false);
       setEditId(null);
@@ -206,14 +229,14 @@ const handleViewCustomers = async (staffId: string) => {
                       >
                         Edit
                       </Button>
-                   <Button
-  variant="info"
-  size="sm"
-  className="me-2 mx-2"
-  onClick={() => handleViewCustomers(key)}
->
-  Customers
-</Button>
+                      <Button
+                        variant="info"
+                        size="sm"
+                        className="me-2 mx-2"
+                        onClick={() => handleViewCustomers(key)}
+                      >
+                        Customers
+                      </Button>
                     </td>
                   </tr>
                 ))
@@ -290,30 +313,29 @@ const handleViewCustomers = async (staffId: string) => {
             </div>
           </Modal.Footer>
         </Modal>
+
         {/* ✅ Customer List Modal */}
-<Modal
-  show={showCustomerModal}
-  onHide={() => setShowCustomerModal(false)}
-  centered
->
-  <Modal.Header closeButton className="bg-dark text-white">
-    <Modal.Title>Assigned Customers</Modal.Title>
-  </Modal.Header>
+        <Modal
+          show={showCustomerModal}
+          onHide={() => setShowCustomerModal(false)}
+          centered
+        >
+          <Modal.Header closeButton className="bg-dark text-white">
+            <Modal.Title>Assigned Customers</Modal.Title>
+          </Modal.Header>
 
-  <Modal.Body className="bg-dark text-white">
-    {allocatedCustomers && allocatedCustomers.length > 0 ? (
-      <ul className="list-disc pl-5">
-        {allocatedCustomers.map((customer:any) => (
-          <li key={customer.id}>{customer.username}</li>
-        ))}
-      </ul>
-    ) : (
-      <p>No customers found for this staff.</p>
-    )}
-  </Modal.Body>
-</Modal>
-
-
+          <Modal.Body className="bg-dark text-white">
+            {allocatedCustomers && allocatedCustomers.length > 0 ? (
+              <ul className="list-disc pl-5">
+                {allocatedCustomers.map((customer: any) => (
+                  <li key={customer.id}>{customer.username}</li>
+                ))}
+              </ul>
+            ) : (
+              <p>No customers found for this staff.</p>
+            )}
+          </Modal.Body>
+        </Modal>
       </Container>
     </div>
   );
