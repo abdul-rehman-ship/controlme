@@ -7,6 +7,8 @@ import { db } from '../../../../firebase';
 import { Button, Container, Modal, Form, Table } from 'react-bootstrap';
 import toast, { Toaster } from 'react-hot-toast';
 import Navbar from '../../../components/navbar';
+import { useCookies } from 'react-cookie';
+
 
 interface Workflow {
   workflowId: string;
@@ -18,6 +20,7 @@ interface Workflow {
 export default function CustomerWorkflowPage() {
   const { id } = useParams();
   const router = useRouter();
+  const [cookies] = useCookies(['adminAuth']);
 
   const [workflows, setWorkflows] = useState<Record<string, Workflow>>({});
   const [showModal, setShowModal] = useState(false);
@@ -28,6 +31,13 @@ export default function CustomerWorkflowPage() {
   const [username, setUsername] = useState<string>('');
 
   // ✅ Fetch customer name from Users node
+    useEffect(() => {
+      toast.dismiss();
+      if (!cookies.adminAuth) {
+        toast.error('Please login first');
+        router.push('/');
+      }
+    }, [cookies, router]);
   useEffect(() => {
     if (!id) return;
 

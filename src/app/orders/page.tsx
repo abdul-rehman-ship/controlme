@@ -7,6 +7,10 @@ import { Table, Container, Form, Button } from 'react-bootstrap';
 import toast, { Toaster } from 'react-hot-toast';
 import * as XLSX from 'xlsx';
 import Navbar from '../../components/navbar';
+import { useCookies } from 'react-cookie';
+import { useRouter } from 'next/navigation';
+
+
 
 interface Order {
   orderId: string;
@@ -33,10 +37,20 @@ interface User {
 }
 
 export default function AdminOrdersPage() {
+
+
   const [orders, setOrders] = useState<Record<string, Order>>({});
   const [users, setUsers] = useState<Record<string, User>>({});
   const [loading, setLoading] = useState(false);
-
+    const router = useRouter();
+    const [cookies] = useCookies(['adminAuth']);
+useEffect(() => {
+      toast.dismiss();
+      if (!cookies.adminAuth) {
+        toast.error('Please login first');
+        router.push('/');
+      }
+    }, [cookies, router]);
   // Fetch all users
   useEffect(() => {
     const usersRef = ref(db, 'Users');
