@@ -16,6 +16,7 @@ export default function StaffHome() {
   const [showModal, setShowModal] = useState(false);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [allocatedMachine, setAllocatedMachine] = useState(""); // 🆕 added
   const [staffs, setStaffs] = useState<Record<string, any>>({});
   const [loading, setLoading] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
@@ -127,6 +128,7 @@ export default function StaffHome() {
           username,
           password,
           userType: "staff",
+          allocatedMachine: allocatedMachine || "", // 🆕 added
           allocatedCustomers: [],
           fcmToken: "",
         });
@@ -145,6 +147,7 @@ export default function StaffHome() {
           userType: "staff",
           fcmToken: oldData.fcmToken || "",
           allocatedCustomers: oldData.allocatedCustomers || [],
+          allocatedMachine: allocatedMachine || oldData.allocatedMachine || "", // 🆕 added
         });
 
         toast.success("Staff updated successfully");
@@ -153,6 +156,7 @@ export default function StaffHome() {
       setShowModal(false);
       setUsername("");
       setPassword("");
+      setAllocatedMachine(""); // 🆕 added
       setEditId(null);
     } catch (error) {
       console.error(error);
@@ -176,6 +180,7 @@ export default function StaffHome() {
       setEditId(null);
       setUsername("");
       setPassword("");
+      setAllocatedMachine(""); // 🆕 added
     } catch (error) {
       console.error(error);
       toast.error("Error deleting staff");
@@ -187,6 +192,7 @@ export default function StaffHome() {
   const handleEdit = (staffId: string, staff: any) => {
     setUsername(staff.username);
     setPassword(staff.password);
+    setAllocatedMachine(staff.allocatedMachine || ""); // 🆕 added
     setEditId(staffId);
     setShowModal(true);
   };
@@ -211,6 +217,7 @@ export default function StaffHome() {
               <tr>
                 <th>Username</th>
                 <th>Password</th>
+                <th>Allocated Machine</th> {/* 🆕 added */}
                 <th>Actions</th>
               </tr>
             </thead>
@@ -220,6 +227,7 @@ export default function StaffHome() {
                   <tr key={key}>
                     <td>{staff.username}</td>
                     <td>{staff.password}</td>
+                    <td>{staff.allocatedMachine || "—"}</td> {/* 🆕 added */}
                     <td>
                       <Button
                         variant="warning"
@@ -242,7 +250,7 @@ export default function StaffHome() {
                 ))
               ) : (
                 <tr>
-                  <td colSpan={3} className="text-center text-muted">
+                  <td colSpan={4} className="text-center text-muted">
                     No staff found
                   </td>
                 </tr>
@@ -269,13 +277,22 @@ export default function StaffHome() {
                   disabled={!!editId}
                 />
               </Form.Group>
-              <Form.Group>
+              <Form.Group className="mb-3">
                 <Form.Label className="fw-semi-bold">Password</Form.Label>
                 <Form.Control
                   type="text"
                   placeholder="Enter password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
+                />
+              </Form.Group>
+              <Form.Group>
+                <Form.Label className="fw-semi-bold">Allocated Machine</Form.Label>
+                <Form.Control
+                  type="text"
+                  placeholder="Enter allocated machine"
+                  value={allocatedMachine}
+                  onChange={(e) => setAllocatedMachine(e.target.value)}
                 />
               </Form.Group>
             </Form>

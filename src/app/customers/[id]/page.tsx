@@ -4,11 +4,10 @@ import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { ref, push, set, onValue, remove, get, child } from 'firebase/database';
 import { db } from '../../../../firebase';
-import { Button, Container, Modal, Form, Table } from 'react-bootstrap';
+import { Button, Container, Modal, Form, Table, InputGroup } from 'react-bootstrap';
 import toast, { Toaster } from 'react-hot-toast';
 import Navbar from '../../../components/navbar';
 import { useCookies } from 'react-cookie';
-
 
 interface Workflow {
   workflowId: string;
@@ -25,22 +24,23 @@ export default function CustomerWorkflowPage() {
   const [workflows, setWorkflows] = useState<Record<string, Workflow>>({});
   const [showModal, setShowModal] = useState(false);
   const [screenTitle, setScreenTitle] = useState('');
-  const [options, setOptions] = useState<string[]>(['', '', '', '']);
+  const [options, setOptions] = useState<string[]>(['']);
   const [editId, setEditId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [username, setUsername] = useState<string>('');
 
-  // ✅ Fetch customer name from Users node
-    useEffect(() => {
-      toast.dismiss();
-      if (!cookies.adminAuth) {
-        toast.error('Please login first');
-        router.push('/');
-      }
-    }, [cookies, router]);
+  // ✅ Check login
+  useEffect(() => {
+    toast.dismiss();
+    if (!cookies.adminAuth) {
+      toast.error('Please login first');
+      router.push('/');
+    }
+  }, [cookies, router]);
+
+  // ✅ Fetch customer name
   useEffect(() => {
     if (!id) return;
-
     const fetchCustomer = async () => {
       try {
         const snapshot = await get(child(ref(db), `Users/${id}`));
@@ -55,11 +55,10 @@ export default function CustomerWorkflowPage() {
         toast.error('Error fetching user data');
       }
     };
-
     fetchCustomer();
   }, [id]);
 
-  // ✅ Fetch all workflows for this customer
+  // ✅ Fetch workflows
   useEffect(() => {
     if (!id) return;
     const workflowsRef = ref(db, 'Workflows');
@@ -80,7 +79,7 @@ export default function CustomerWorkflowPage() {
 
   // ✅ Save or update workflow
   const handleSaveWorkflow = async () => {
-    if (!screenTitle || options.some((opt) => !opt)) {
+    if (!screenTitle || options.some((opt) => !opt.trim())) {
       toast.error('Please fill all fields');
       return;
     }
@@ -109,7 +108,7 @@ export default function CustomerWorkflowPage() {
 
       setShowModal(false);
       setScreenTitle('');
-      setOptions(['', '', '', '']);
+      setOptions(['']);
       setEditId(null);
     } catch (error) {
       console.error(error);
@@ -136,6 +135,17 @@ export default function CustomerWorkflowPage() {
       console.error(error);
       toast.error('Error deleting workflow');
     }
+  };
+
+  // ✅ Add new option
+  const handleAddOption = () => {
+    setOptions([...options, '']);
+  };
+
+  // ✅ Remove specific option
+  const handleRemoveOption = (index: number) => {
+    const updated = options.filter((_, i) => i !== index);
+    setOptions(updated.length ? updated : ['']);
   };
 
   return (
@@ -210,9 +220,7 @@ export default function CustomerWorkflowPage() {
         {/* ✅ Modal for Add/Edit */}
         <Modal show={showModal} onHide={() => setShowModal(false)} centered>
           <Modal.Header closeButton className="bg-dark text-white">
-            <Modal.Title>
-              {editId ? 'Edit Workflow' : 'Add New Workflow'}
-            </Modal.Title>
+            <Modal.Title>{editId ? 'Edit Workflow' : 'Add New Workflow'}</Modal.Title>
           </Modal.Header>
 
           <Modal.Body className="bg-dark text-white">
@@ -227,12 +235,18 @@ export default function CustomerWorkflowPage() {
                 />
               </Form.Group>
 
+              <div className="d-flex justify-content-between align-items-center mb-2">
+                <Form.Label>Options</Form.Label>
+                <Button size="sm" variant="success" onClick={handleAddOption}>
+                  + Add Option
+                </Button>
+              </div>
+
               {options.map((opt, i) => (
-                <Form.Group key={i} className="mb-2">
-                  <Form.Label>Option {i + 1}</Form.Label>
+                <InputGroup key={i} className="mb-2">
                   <Form.Control
                     type="text"
-                    placeholder={`Enter option ${i + 1}`}
+                    placeholder={`Option ${i + 1}`}
                     value={opt}
                     onChange={(e) => {
                       const updated = [...options];
@@ -240,7 +254,12 @@ export default function CustomerWorkflowPage() {
                       setOptions(updated);
                     }}
                   />
-                </Form.Group>
+                  {options.length > 1 && (
+                    <Button variant="outline-danger" onClick={() => handleRemoveOption(i)}>
+                      ✕
+                    </Button>
+                  )}
+                </InputGroup>
               ))}
             </Form>
           </Modal.Body>

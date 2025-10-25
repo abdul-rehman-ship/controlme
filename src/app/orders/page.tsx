@@ -10,8 +10,6 @@ import Navbar from '../../components/navbar';
 import { useCookies } from 'react-cookie';
 import { useRouter } from 'next/navigation';
 
-
-
 interface Order {
   orderId: string;
   customerId: string;
@@ -37,21 +35,22 @@ interface User {
 }
 
 export default function AdminOrdersPage() {
-
-
   const [orders, setOrders] = useState<Record<string, Order>>({});
   const [users, setUsers] = useState<Record<string, User>>({});
   const [loading, setLoading] = useState(false);
-    const router = useRouter();
-    const [cookies] = useCookies(['adminAuth']);
-useEffect(() => {
-      toast.dismiss();
-      if (!cookies.adminAuth) {
-        toast.error('Please login first');
-        router.push('/');
-      }
-    }, [cookies, router]);
-  // Fetch all users
+  const router = useRouter();
+  const [cookies] = useCookies(['adminAuth']);
+
+  // ✅ Check admin authentication
+  useEffect(() => {
+    toast.dismiss();
+    if (!cookies.adminAuth) {
+      toast.error('Please login first');
+      router.push('/');
+    }
+  }, [cookies, router]);
+
+  // ✅ Fetch all users
   useEffect(() => {
     const usersRef = ref(db, 'Users');
     onValue(usersRef, (snap) => {
@@ -59,7 +58,7 @@ useEffect(() => {
     });
   }, []);
 
-  // Fetch all orders
+  // ✅ Fetch all orders
   useEffect(() => {
     const ordersRef = ref(db, 'Orders');
     onValue(ordersRef, (snapshot) => {
@@ -67,7 +66,42 @@ useEffect(() => {
     });
   }, []);
 
-  // Update order status
+  // ✅ Automatically reject pending orders older than 1 minute
+  useEffect(() => {
+    if (!orders || Object.keys(orders).length === 0) return;
+
+    const checkAndReject = async () => {
+      const now = Date.now();
+      const updates: Record<string, any> = {};
+
+      Object.entries(orders).forEach(([key, order]) => {
+        if (
+          order.status === 'Pending' &&
+          order.timestamp &&
+          now - order.timestamp > 60 * 1000 // older than 1 min
+        ) {
+          updates[`Orders/${key}/status`] = 'Rejected';
+        }
+      });
+
+      if (Object.keys(updates).length > 0) {
+        try {
+          await update(ref(db), updates);
+          toast('Some pending orders were auto-rejected ⏰', { icon: '⚠️' });
+        } catch (error) {
+          console.error('Auto-reject error:', error);
+        }
+      }
+    };
+
+    // Run immediately on load and then every 10s
+    checkAndReject();
+    const interval = setInterval(checkAndReject, 10 * 1000);
+
+    return () => clearInterval(interval);
+  }, [orders]);
+
+  // ✅ Update order status manually
   const handleStatusChange = async (orderKey: string, newStatus: string) => {
     setLoading(true);
     try {
@@ -80,13 +114,14 @@ useEffect(() => {
     setLoading(false);
   };
 
+  // ✅ Format date
   const formatDate = (ts?: number) => {
     if (!ts) return 'N/A';
     const d = new Date(ts);
     return `${d.toLocaleDateString()} ${d.toLocaleTimeString()}`;
   };
 
-  // 🧩 Render workflows with support for object/array + nested options object
+  // ✅ Render workflows (handle both object and array)
   const renderWorkflows = (wfData: any) => {
     if (!wfData) return <div className="text-muted">No workflows</div>;
 
@@ -107,7 +142,7 @@ useEffect(() => {
           {optionsArray.length > 0 ? (
             <ul className="mb-1">
               {optionsArray.map((opt: string, i: number) => (
-                <li key={i}>•{opt}</li>
+                <li key={i}>• {opt}</li>
               ))}
             </ul>
           ) : (
@@ -118,17 +153,17 @@ useEffect(() => {
     });
   };
 
-  // 🧾 Export to Excel
+  // ✅ Export to Excel
   const handleExport = () => {
     const data = Object.entries(orders).map(([key, order]) => {
       const customer = users[order.customerId];
-      const staff = (order.staffId && users[order.staffId]) ? users[order.staffId] : null;
+      const staff =
+        order.staffId && users[order.staffId] ? users[order.staffId] : null;
 
       const selectedOptionsList = order.selectedOptions
         ? Object.values(order.selectedOptions).join(', ')
         : 'No selection';
 
-      // Flatten workflows
       const wfList = order.workflows
         ? Object.values(order.workflows).map((wf: any) => {
             const opts = wf.options
@@ -158,6 +193,7 @@ useEffect(() => {
     toast.success('Excel file exported!');
   };
 
+  // ✅ UI
   return (
     <div className="min-h-screen bg-dark text-white">
       <Toaster position="top-center" />
@@ -187,13 +223,18 @@ useEffect(() => {
             </thead>
             <tbody>
               {Object.entries(orders).length > 0 ? (
-                Object.entries(orders).map(([key, order]: any) => {
+                Object.entries(orders).map(([key, order]: [string, Order]) => {
                   const customer = users[order.customerId] ?? null;
-                  const staff = (order.staffId && users[order.staffId]) ? users[order.staffId] : null;
+                  const staff =
+                    order.staffId && users[order.staffId]
+                      ? users[order.staffId]
+                      : null;
 
                   return (
                     <tr key={key}>
-                      <td style={{ maxWidth: 220, wordBreak: 'break-all' }}>{order.orderId ?? key}</td>
+                      <td style={{ maxWidth: 220, wordBreak: 'break-all' }}>
+                        {order.orderId ?? key}
+                      </td>
 
                       <td>
                         {customer?.username ? (
@@ -211,8 +252,12 @@ useEffect(() => {
                       <td>
                         {order.staffName || staff?.username ? (
                           <div>
-                            <div className="fw-bold">{order.staffName ?? staff?.username}</div>
-                            <div className="text-muted small">{order.staffId}</div>
+                            <div className="fw-bold">
+                              {order.staffName ?? staff?.username}
+                            </div>
+                            <div className="text-muted small">
+                              {order.staffId}
+                            </div>
                           </div>
                         ) : (
                           <div className="text-muted">N/A</div>
@@ -220,11 +265,14 @@ useEffect(() => {
                       </td>
 
                       <td style={{ minWidth: 200 }}>
-                        {order.selectedOptions && Object.keys(order.selectedOptions).length > 0 ? (
+                        {order.selectedOptions &&
+                        Object.keys(order.selectedOptions).length > 0 ? (
                           <ul className="mb-0">
-                            {Object.entries(order.selectedOptions).map(([key, value]: [string, any], i: number) => (
-                              <li key={key}>{value}</li>
-                            ))}
+                            {Object.entries(order.selectedOptions).map(
+                              ([key, value]: [string, any], i: number) => (
+                                <li key={key}>{value}</li>
+                              )
+                            )}
                           </ul>
                         ) : (
                           <div className="text-muted">No selection</div>
@@ -233,7 +281,7 @@ useEffect(() => {
 
                       <td style={{ minWidth: 240 }}>
                         {order.workflows ? (
-                          renderWorkflows( order.workflows)
+                          renderWorkflows(order.workflows)
                         ) : (
                           <div className="text-muted">No workflows</div>
                         )}
@@ -261,7 +309,9 @@ useEffect(() => {
                         <Form.Select
                           size="sm"
                           value={order.status}
-                          onChange={(e) => handleStatusChange(key, e.target.value)}
+                          onChange={(e) =>
+                            handleStatusChange(key, e.target.value)
+                          }
                           disabled={loading}
                         >
                           <option value="Pending">Pending</option>
