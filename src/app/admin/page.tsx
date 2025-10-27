@@ -124,6 +124,7 @@ export default function AdminHome() {
           password,
           userType: 'customer',
           allocatedStaffs: [],
+           allocatedMachine: "",
           fcmToken: '',
         });
 
@@ -140,6 +141,8 @@ export default function AdminHome() {
           password,
           userType: oldData.userType || 'customer',
           allocatedStaffs: oldData.allocatedStaffs || [],
+          allocatedMachine: oldData.allocatedMachine || "", // 🆕 added
+
           fcmToken: oldData.fcmToken || '',
         });
 

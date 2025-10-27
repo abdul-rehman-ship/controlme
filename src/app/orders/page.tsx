@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { ref, onValue, update } from 'firebase/database';
+import { ref, onValue, update, remove } from 'firebase/database';
 import { db } from '../../../firebase';
 import { Table, Container, Form, Button } from 'react-bootstrap';
 import toast, { Toaster } from 'react-hot-toast';
@@ -38,6 +38,7 @@ export default function AdminOrdersPage() {
   const [orders, setOrders] = useState<Record<string, Order>>({});
   const [users, setUsers] = useState<Record<string, User>>({});
   const [loading, setLoading] = useState(false);
+  const [selectedOrders, setSelectedOrders] = useState<string[]>([]);
   const router = useRouter();
   const [cookies] = useCookies(['adminAuth']);
 
@@ -94,12 +95,61 @@ export default function AdminOrdersPage() {
       }
     };
 
-    // Run immediately on load and then every 10s
     checkAndReject();
     const interval = setInterval(checkAndReject, 10 * 1000);
-
     return () => clearInterval(interval);
   }, [orders]);
+
+  // ✅ Handle single checkbox toggle
+  const handleCheckboxChange = (orderKey: string) => {
+    setSelectedOrders((prev) =>
+      prev.includes(orderKey)
+        ? prev.filter((id) => id !== orderKey)
+        : [...prev, orderKey]
+    );
+  };
+
+  // ✅ Handle “Select All” checkbox
+  const handleSelectAll = (checked: boolean) => {
+    if (checked) {
+      setSelectedOrders(Object.keys(orders));
+    } else {
+      setSelectedOrders([]);
+    }
+  };
+
+  // ✅ Delete selected orders
+  const handleDeleteSelected = async () => {
+    if (selectedOrders.length === 0) {
+      toast.error('No orders selected!');
+      return;
+    }
+
+    if (!confirm(`Are you sure you want to delete ${selectedOrders.length} order(s)?`)) return;
+
+    setLoading(true);
+    try {
+      const deletes = selectedOrders.map((key) => remove(ref(db, `Orders/${key}`)));
+      await Promise.all(deletes);
+      toast.success(`${selectedOrders.length} order(s) deleted`);
+      setSelectedOrders([]);
+    } catch (error) {
+      console.error(error);
+      toast.error('Error deleting selected orders');
+    }
+    setLoading(false);
+  };
+
+  // ✅ Delete single order
+  const handleDeleteSingle = async (key: string) => {
+    if (!confirm('Delete this order?')) return;
+    try {
+      await remove(ref(db, `Orders/${key}`));
+      toast.success('Order deleted');
+    } catch (error) {
+      toast.error('Error deleting order');
+    }
+  };
 
   // ✅ Update order status manually
   const handleStatusChange = async (orderKey: string, newStatus: string) => {
@@ -124,7 +174,6 @@ export default function AdminOrdersPage() {
   // ✅ Render workflows (handle both object and array)
   const renderWorkflows = (wfData: any) => {
     if (!wfData) return <div className="text-muted">No workflows</div>;
-
     const workflowsArray = Array.isArray(wfData)
       ? wfData
       : Object.values(wfData);
@@ -200,17 +249,32 @@ export default function AdminOrdersPage() {
       <Navbar />
 
       <Container className="py-5">
-        <div className="d-flex justify-content-between align-items-center mb-4">
+        <div className="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
           <h2 className="fw-bold">All Orders (Admin)</h2>
-          <Button variant="success" onClick={handleExport}>
-            📤 Export to Excel
-          </Button>
+          <div className="d-flex gap-2">
+            <Button variant="danger" onClick={handleDeleteSelected} disabled={loading}>
+              🗑️ Delete Selected
+            </Button>
+            <Button variant="success" onClick={handleExport}>
+              📤 Export to Excel
+            </Button>
+          </div>
         </div>
 
         <div className="table-responsive">
-          <Table bordered hover variant="dark" className="rounded shadow">
+          <Table bordered hover variant="dark" className="rounded shadow align-middle">
             <thead>
               <tr>
+                <th>
+                  <Form.Check
+                    type="checkbox"
+                    onChange={(e) => handleSelectAll(e.target.checked)}
+                    checked={
+                      selectedOrders.length > 0 &&
+                      selectedOrders.length === Object.keys(orders).length
+                    }
+                  />
+                </th>
                 <th>Order ID</th>
                 <th>Customer</th>
                 <th>Staff</th>
@@ -219,11 +283,13 @@ export default function AdminOrdersPage() {
                 <th>Status</th>
                 <th>Timestamp</th>
                 <th>Change Status</th>
+                {/* <th>Delete</th> */}
               </tr>
             </thead>
+
             <tbody>
               {Object.entries(orders).length > 0 ? (
-                Object.entries(orders).map(([key, order]: [string, Order]) => {
+                Object.entries(orders).map(([key, order]) => {
                   const customer = users[order.customerId] ?? null;
                   const staff =
                     order.staffId && users[order.staffId]
@@ -232,32 +298,30 @@ export default function AdminOrdersPage() {
 
                   return (
                     <tr key={key}>
+                      <td>
+                        <Form.Check
+                          type="checkbox"
+                          checked={selectedOrders.includes(key)}
+                          onChange={() => handleCheckboxChange(key)}
+                        />
+                      </td>
+
                       <td style={{ maxWidth: 220, wordBreak: 'break-all' }}>
                         {order.orderId ?? key}
                       </td>
 
                       <td>
                         {customer?.username ? (
-                          <div>
-                            <div className="fw-bold">{customer.username}</div>
-                          </div>
+                          <div className="fw-bold">{customer.username}</div>
                         ) : (
-                          <div>
-                            <div className="fw-bold">{order.customerId}</div>
-                            <div className="text-muted small">Unknown user</div>
-                          </div>
+                          <div>{order.customerId ?? 'Unknown'}</div>
                         )}
                       </td>
 
                       <td>
                         {order.staffName || staff?.username ? (
-                          <div>
-                            <div className="fw-bold">
-                              {order.staffName ?? staff?.username}
-                            </div>
-                            <div className="text-muted small">
-                              {order.staffId}
-                            </div>
+                          <div className="fw-bold">
+                            {order.staffName ?? staff?.username}
                           </div>
                         ) : (
                           <div className="text-muted">N/A</div>
@@ -265,12 +329,11 @@ export default function AdminOrdersPage() {
                       </td>
 
                       <td style={{ minWidth: 200 }}>
-                        {order.selectedOptions &&
-                        Object.keys(order.selectedOptions).length > 0 ? (
+                        {order.selectedOptions ? (
                           <ul className="mb-0">
-                            {Object.entries(order.selectedOptions).map(
-                              ([key, value]: [string, any], i: number) => (
-                                <li key={key}>{value}</li>
+                            {Object.values(order.selectedOptions).map(
+                              (value, i) => (
+                                <li key={i}>{value}</li>
                               )
                             )}
                           </ul>
@@ -305,7 +368,7 @@ export default function AdminOrdersPage() {
 
                       <td>{formatDate(order.timestamp)}</td>
 
-                      <td style={{ minWidth: 170 }}>
+                      <td style={{ minWidth: 150 }}>
                         <Form.Select
                           size="sm"
                           value={order.status}
@@ -319,12 +382,22 @@ export default function AdminOrdersPage() {
                           <option value="Rejected">Rejected</option>
                         </Form.Select>
                       </td>
+
+                      {/* <td>
+                        <Button
+                          size="sm"
+                          variant="outline-danger"
+                          onClick={() => handleDeleteSingle(key)}
+                        >
+                          Delete
+                        </Button>
+                      </td> */}
                     </tr>
                   );
                 })
               ) : (
                 <tr>
-                  <td colSpan={8} className="text-center text-muted">
+                  <td colSpan={10} className="text-center text-muted">
                     No orders found.
                   </td>
                 </tr>
