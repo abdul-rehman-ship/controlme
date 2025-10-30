@@ -297,6 +297,7 @@ export default function StaffHome() {
                   placeholder="Enter allocated machine"
                   value={allocatedMachine}
                   onChange={(e) => setAllocatedMachine(e.target.value)}
+                  required
                 />
               </Form.Group>
             </Form>
