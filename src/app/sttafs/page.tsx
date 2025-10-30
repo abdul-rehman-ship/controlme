@@ -95,6 +95,10 @@ export default function StaffHome() {
 
   // ✅ Add or Update Staff
   const handleSaveStaff = async () => {
+    if(password.length<6){
+      toast.error("Password must be at least 6 characters long");
+      return;
+    }
     if (!username || !password) {
       toast.error("Please fill all fields");
       return;
